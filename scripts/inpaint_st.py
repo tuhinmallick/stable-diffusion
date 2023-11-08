@@ -34,9 +34,7 @@ def numpy_to_pil(images):
     if images.ndim == 3:
         images = images[None, ...]
     images = (images * 255).round().astype("uint8")
-    pil_images = [Image.fromarray(image) for image in images]
-
-    return pil_images
+    return [Image.fromarray(image) for image in images]
 
 def put_watermark(img):
     if wm_encoder is not None:
@@ -61,9 +59,7 @@ def initialize_model(config, ckpt):
 
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     model = model.to(device)
-    sampler = DDIMSampler(model)
-
-    return sampler
+    return DDIMSampler(model)
 
 
 def make_batch_sd(
@@ -85,13 +81,18 @@ def make_batch_sd(
 
     masked_image = image * (mask < 0.5)
 
-    batch = {
-            "image": repeat(image.to(device=device), "1 ... -> n ...", n=num_samples),
-            "txt": num_samples * [txt],
-            "mask": repeat(mask.to(device=device), "1 ... -> n ...", n=num_samples),
-            "masked_image": repeat(masked_image.to(device=device), "1 ... -> n ...", n=num_samples),
-            }
-    return batch
+    return {
+        "image": repeat(
+            image.to(device=device), "1 ... -> n ...", n=num_samples
+        ),
+        "txt": num_samples * [txt],
+        "mask": repeat(
+            mask.to(device=device), "1 ... -> n ...", n=num_samples
+        ),
+        "masked_image": repeat(
+            masked_image.to(device=device), "1 ... -> n ...", n=num_samples
+        ),
+    }
 
 
 def inpaint(sampler, image, mask, prompt, seed, scale, ddim_steps, num_samples=1, w=512, h=512):
@@ -108,7 +109,7 @@ def inpaint(sampler, image, mask, prompt, seed, scale, ddim_steps, num_samples=1
 
             c = model.cond_stage_model.encode(batch["txt"])
 
-            c_cat = list()
+            c_cat = []
             for ck in model.concat_keys:
                 cc = batch[ck].float()
                 if ck != model.masked_image_key:
@@ -154,11 +155,10 @@ def inpaint(sampler, image, mask, prompt, seed, scale, ddim_steps, num_samples=1
 
 def run():
     st.title("Stable Diffusion Inpainting")
-    
+
     sampler = initialize_model(sys.argv[1], sys.argv[2])
 
-    image = st.file_uploader("Image", ["jpg", "png"])
-    if image:
+    if image := st.file_uploader("Image", ["jpg", "png"]):
         image = Image.open(image)
         w, h = image.size
         print(f"loaded input image of size ({w}, {h})")
@@ -188,7 +188,7 @@ def run():
 
         st.write("Canvas")
         st.caption("Draw a mask to inpaint, then click the 'Send to Streamlit' button (bottom left, with an arrow on it).")
-        canvas_result = st_canvas(
+        if canvas_result := st_canvas(
             fill_color=fill_color,
             stroke_width=stroke_width,
             stroke_color=stroke_color,
@@ -199,8 +199,7 @@ def run():
             width=width,
             drawing_mode=drawing_mode,
             key="canvas",
-        )
-        if canvas_result:
+        ):
             mask = canvas_result.image_data
             mask = mask[:, :, -1] > 0
             if mask.sum() > 0:
